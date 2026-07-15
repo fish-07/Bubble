@@ -12,9 +12,9 @@
 #board{background:rgba(255,255,255,0.08);backdrop-filter:blur(12px);border:2px solid rgba(255,255,255,0.2);border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:14px;width:min(92vw,400px)}
 #boardInner{aspect-ratio:1;overflow:hidden;position:relative;touch-action:none;width:100%}
 body{align-items:center;background:#001020;display:flex;font-family:'Baloo 2',sans-serif;justify-content:center;min-height:100vh;overflow:hidden}
-.bubble{cursor:pointer;height:calc(100%/9 - 4px);position:absolute;touch-action:none;transform:rotate(var(--rotation,0deg));transition:top 0.3s cubic-bezier(0.34,1.56,0.64,1),left 0.22s cubic-bezier(0.4,0,0.2,1),transform 0.15s ease;width:calc(100%/9 - 4px)}
-.bubble svg{display:block;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));height:100%;width:100%}
-.bubble.active{transform:rotate(var(--rotation,0deg)) scale(1.08)}
+.bubble{cursor:pointer;height:calc(100%/9);left:0;position:absolute;top:0;touch-action:none;transform:translate(var(--bx,0),var(--by,0)) rotate(var(--rotation,0deg));transition:transform 0.28s cubic-bezier(0.34,1.56,0.64,1);width:calc(100%/9)}
+.bubble svg{display:block;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));height:calc(100% - 4px);margin:2px;width:calc(100% - 4px)}
+.bubble.active{transform:translate(var(--bx,0),var(--by,0)) rotate(var(--rotation,0deg)) scale(1.08)}
 .bubble.matched{animation:pop 0.35s ease-out forwards}
 .burst{animation:burst 0.35s ease-out forwards;border-radius:50%;height:calc(100%/9 - 4px);pointer-events:none;position:absolute;width:calc(100%/9 - 4px)}
 .particle{animation:particle 0.5s ease-out forwards;border-radius:50%;height:8px;pointer-events:none;position:absolute;width:8px}
@@ -25,7 +25,11 @@ body{align-items:center;background:#001020;display:flex;font-family:'Baloo 2',sa
 .circleValue{color:#F0F0F0;font-size:18px;font-weight:700;line-height:20px}
 #game{align-items:center;display:flex;flex-direction:column;gap:20px;position:relative;z-index:1}
 #game.hidden{display:none}
-#level{align-items:center;color:#F0F0F0;display:flex;font-size:28px;font-weight:700;height:60px;justify-content:center;left:50%;letter-spacing:2px;position:absolute;top:0;transform:translateX(-50%)}
+#level{align-items:center;color:#F0F0F0;display:flex;flex-direction:column;gap:0;left:50%;position:absolute;top:0;transform:translateX(-50%)}
+#level.centered{top:30px;transform:translate(-50%,-50%)}
+#levelHighScore:empty{display:none}
+#levelHighScore{color:rgba(240,240,240,0.7);font-size:14px;font-weight:500;letter-spacing:1px;line-height:1}
+#levelNumber{font-size:28px;font-weight:700;letter-spacing:2px;line-height:1}
 #overlay{align-items:center;background:rgba(0,16,32,0.85);backdrop-filter:blur(8px);display:flex;flex-direction:column;height:100%;justify-content:center;left:0;position:fixed;top:0;width:100%;z-index:2}
 #overlay.hidden{display:none}
 #overlayBonuses{color:#F0F0F0;display:flex;flex-direction:column;font-size:16px;gap:5px;margin-bottom:20px}
@@ -67,7 +71,7 @@ body{align-items:center;background:#001020;display:flex;font-family:'Baloo 2',sa
 .trackNodeStars svg{display:block;height:14px;width:14px}
 @keyframes burst{0%{opacity:0.9;transform:scale(0.3)}100%{opacity:0;transform:scale(1.8)}}
 @keyframes particle{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0.3)}}
-@keyframes pop{0%{opacity:1;transform:rotate(var(--rotation,0deg)) scale(1)}40%{opacity:1;transform:rotate(var(--rotation,0deg)) scale(1.25)}100%{opacity:0;transform:rotate(var(--rotation,0deg)) scale(0)}}
+@keyframes pop{0%{opacity:1;transform:translate(var(--bx,0),var(--by,0)) rotate(var(--rotation,0deg)) scale(1)}40%{opacity:1;transform:translate(var(--bx,0),var(--by,0)) rotate(var(--rotation,0deg)) scale(1.25)}100%{opacity:0;transform:translate(var(--bx,0),var(--by,0)) rotate(var(--rotation,0deg)) scale(0)}}
 </style>
 </head>
 <body>
@@ -81,7 +85,7 @@ body{align-items:center;background:#001020;display:flex;font-family:'Baloo 2',sa
 </div>
 </div>
 <div id="game" class="hidden">
-<div id="level"></div>
+<div id="level"><div id="levelNumber"></div><div id="levelHighScore"></div></div>
 <div id="stats"></div>
 <div id="board"><div id="boardInner"></div></div>
 </div>
@@ -104,15 +108,30 @@ const levelMovesMax=90;
 const levelMovesMin=50;
 const size=9;
 const elementsById=new Map();
-const state={activePointer:null,board:[],busy:false,celebrating:false,colors:[],level:0,levelCache:{},levelHighScores:{},levelStars:{},moves:0,newlyUnlockedLevel:null,rareColor:null,requirements:[],score:0,stats:{},trackContentHeight:0,trackMaxLogicalY:0,trackNodeEls:new Map(),trackPositions:[],trackRenderedCount:0,unlockedLevels:new Set([1])};
+const state={activePointer:null,board:[],busy:false,celebrating:false,colors:[],level:0,levelCache:{},levelHasStarTile:{},levelHighScores:{},levelStars:{},levelStartHighScore:undefined,moves:0,newlyUnlockedLevel:null,rareColor:null,requirements:[],score:0,stats:{},trackContentHeight:0,trackMaxLogicalY:0,trackNodeEls:new Map(),trackPositions:[],trackRenderedCount:0,unlockedLevels:new Set([1])};
+let currentRandom=Math.random;
 let nextId=0;
+function hashSeed(n){
+let h=n+0x9E3779B9;
+h=Math.imul(h^h>>>16,0x21F0AAAD);
+h=Math.imul(h^h>>>15,0x735A2D97);
+return(h^h>>>15)>>>0;
+}
+function mulberry32(seed){
+return function(){
+seed=seed+0x6D2B79F5|0;
+let t=Math.imul(seed^seed>>>15,1|seed);
+t=t+Math.imul(t^t>>>7,61|t)^t;
+return((t^t>>>14)>>>0)/4294967296;
+};
+}
 let boardInner=null;
 let nodesLayer=null;
 let pathsDefs=null;
 let pathsGroup=null;
 let trackPathEls=[];
 let trackWidth=340;
-const trackBottomPadding=90;
+let trackBottomPadding=90;
 const trackTopPadding=100;
 function applyGravity(){
 for(let c=0;c<size;c++){
@@ -157,28 +176,32 @@ return withUid(svg,uid);
 function withUid(svg,uid){
 return svg.replace(/id="([a-zA-Z0-9-]+)"/g,'id="$1-'+uid+'"').replace(/url\(#([a-zA-Z0-9-]+)\)/g,'url(#$1-'+uid+')');
 }
-function goldStarSvg(uid,theme){
-const t=theme||palette.yellow;
+function goldStarSvg(uid,colorKey){
+const t=palette[colorKey||'yellow'];
 return withUid('<svg viewBox="0 0 2048 2048" xmlns="http://www.w3.org/2000/svg"><clipPath id="goldstar-clip"><path d="m0 0l2048 0l0 2048l-2048 0l0 -2048z" clip-rule="nonzero"/></clipPath><g clip-path="url(#goldstar-clip)"><defs><radialGradient id="goldstar-ring" gradientUnits="userSpaceOnUse" gradientTransform="matrix(35.913225425999926 0 0 35.913225425999926 0 0)" cx="28.51317314067395" cy="28.513172773783417" fx="28.51317314067395" fy="28.513172773783417" r="35.91322708129883"><stop offset="0" stop-color="'+t.light+'"/><stop offset="1" stop-color="'+t.base+'"/></radialGradient></defs><path fill="url(#goldstar-ring)" d="m112.00193 808.70654l621.1568 -109.33362l290.84125 -587.3706l290.8412 587.3706l621.15686 109.33362l-441.40698 472.34863l93.05469 654.9425l-563.64575 -295.4431l-563.6458 295.4431l93.05481 -654.9425z" fill-rule="evenodd"/><defs><radialGradient id="goldstar-accent" gradientUnits="userSpaceOnUse" gradientTransform="matrix(50.78897046601137 0 0 50.78897046601137 0 0)" cx="38.11847498061798" cy="2.2052488174636427" fx="38.11847498061798" fy="2.2052488174636427" r="50.788970947265625"><stop offset="0" stop-color="'+t.accent+'" stop-opacity="0.5019608"/><stop offset="0.99999994" stop-color="'+t.accent+'" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs><path fill="url(#goldstar-accent)" d="m112.00193 808.70654l621.1568 -109.33362l290.84125 -587.3706l290.8412 587.3706l621.15686 109.33362l-441.40698 472.34863l93.05469 654.9425l-563.64575 -295.4431l-563.6458 295.4431l93.05481 -654.9425z" fill-rule="evenodd"/><defs><radialGradient id="goldstar-sphere" gradientUnits="userSpaceOnUse" gradientTransform="matrix(26.0541925256326 0 0 26.0541925256326 0 0)" cx="39.30269597428053" cy="41.145009574961335" fx="39.30269597428053" fy="41.145009574961335" r="26.05419158935547"><stop offset="0" stop-color="'+t.base+'"/><stop offset="1" stop-color="'+t.light+'"/></radialGradient></defs><path fill="url(#goldstar-sphere)" d="m544.00104 958.6877l326.92462 -57.544006l153.07434 -309.14246l153.07434 309.14246l326.92468 57.544006l-232.31958 248.60455l48.976196 344.70654l-296.65564 -155.49634l-296.6557 155.49634l48.976196 -344.70654z" fill-rule="evenodd"/><defs><radialGradient id="goldstar-glowA" gradientUnits="userSpaceOnUse" gradientTransform="matrix(36.84619242642935 0 0 36.84619242642935 0 0)" cx="40.81830172827298" cy="16.066822124622128" fx="40.81830172827298" fy="16.066822124622128" r="36.84619140625"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs><path fill="url(#goldstar-glowA)" d="m544.00104 958.6877l326.92462 -57.544006l153.07434 -309.14246l153.07434 309.14246l326.92468 57.544006l-232.31958 248.60455l48.976196 344.70654l-296.65564 -155.49634l-296.6557 155.49634l48.976196 -344.70654z" fill-rule="evenodd"/><defs><radialGradient id="goldstar-glowB" gradientUnits="userSpaceOnUse" gradientTransform="matrix(36.84619242642935 0 0 36.84619242642935 0 0)" cx="40.81830172827298" cy="16.066822124622128" fx="40.81830172827298" fy="16.066822124622128" r="36.84619140625"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs><path fill="url(#goldstar-glowB)" d="m544.00104 958.6877l326.92462 -57.544006l153.07434 -309.14246l153.07434 309.14246l326.92468 57.544006l-232.31958 248.60455l48.976196 344.70654l-296.65564 -155.49634l-296.6557 155.49634l48.976196 -344.70654z" fill-rule="evenodd"/><defs><radialGradient id="goldstar-glowC" gradientUnits="userSpaceOnUse" gradientTransform="matrix(36.84619242642935 0 0 36.84619242642935 0 0)" cx="14.764103956380994" cy="42.12100844025905" fx="14.764103956380994" fy="42.12100844025905" r="36.84619140625"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs><path fill="url(#goldstar-glowC)" d="m544.00104 958.6877l326.92462 -57.544006l153.07434 -309.14246l153.07434 309.14246l326.92468 57.544006l-232.31958 248.60455l48.976196 344.70654l-296.65564 -155.49634l-296.6557 155.49634l48.976196 -344.70654z" fill-rule="evenodd"/></g></svg>',uid);
 }
-function starRow(count,uidPrefix,theme){
+function starRow(count,uidPrefix,colorKey,useStarTile){
 const stars=[];
-for(let i=0;i<count;i++)stars.push(goldStarSvg(uidPrefix+'-star'+i,theme));
+for(let i=0;i<count;i++)stars.push(useStarTile?withUid(starSvg(colorKey||'yellow'),uidPrefix+'-star'+i):goldStarSvg(uidPrefix+'-star'+i,colorKey));
 return stars.join('');
 }
+function starTierFromMetCount(metCount){
+const count=metCount>=4?3:metCount>=2?2:1;
+const blue=metCount===6;
+return{blue:blue,count:count};
+}
 function calculateStars(){
-const requirement1=state.score>=800;
+const requirement1=state.score>=700;
 const minimums2=[state.stats.star>=1,state.stats.square>=2,state.stats.diamond>=4,state.stats.triangle>=8];
 const requirement2=minimums2.filter(Boolean).length>=2;
 const requirement3=state.stats.chainReactions>=3;
-const requirement4=state.moves>=15;
+const requirement4=state.moves>=20;
 const requirement5=state.stats.rareMatches>=2;
-const minimums6=[state.score>=1200,state.stats.square>=4,state.stats.diamond>=8,state.stats.chainReactions>=6,state.moves>=30,state.stats.rareMatches>=4];
+const minimums6=[state.score>=1200,state.stats.square>=4,state.stats.diamond>=8,state.stats.chainReactions>=6,state.moves>=35,state.stats.rareMatches>=4];
 const requirement6=minimums6.filter(Boolean).length>=3;
 const metCount=[requirement1,requirement2,requirement3,requirement4,requirement5,requirement6].filter(Boolean).length;
-const count=metCount>=5?3:metCount>=3?2:1;
-const blue=metCount===6;
-return{blue:blue,count:count};
+const tier=starTierFromMetCount(metCount);
+return{blue:tier.blue,count:tier.count,metCount:metCount};
 }
 async function celebrateWin(){
 state.busy=true;
@@ -210,17 +233,18 @@ continue;
 break;
 }
 await sleep(800);
+state.score+=state.moves*5;
+state.score+=difficultyScore();
 const stars=calculateStars();
-const starRank=stars.blue?4:stars.count;
-state.levelStars[state.level]=Math.max(state.levelStars[state.level]||0,starRank);
+const previousMetCount=state.levelStars[state.level];
+state.levelStars[state.level]=previousMetCount===undefined?stars.metCount:Math.max(previousMetCount,stars.metCount);
 state.levelHighScores[state.level]=Math.max(state.levelHighScores[state.level]||0,state.score);
+saveProgress();
 showOverlay('Success!','Continue',returnToTrack,stars);
 }
 function checkEnd(){
 const complete=state.requirements.every(req=>req.matched>=req.needed);
 if(complete){
-state.score+=state.moves*5;
-state.score+=difficultyScore();
 state.unlockedLevels.add(state.level+1);
 state.newlyUnlockedLevel=state.level+1;
 celebrateWin();
@@ -228,6 +252,7 @@ return;
 }
 if(state.moves<=0||!hasValidMove()){
 state.score+=difficultyScore();
+saveProgress();
 showOverlay('Failure!','Continue',returnToTrack);
 return;
 }
@@ -360,6 +385,8 @@ return matchGroups;
 }
 function buildLevelData(level){
 if(state.levelCache[level])return state.levelCache[level];
+const previousRandom=currentRandom;
+currentRandom=mulberry32(hashSeed(level));
 const colors=shuffle([...colorNames]).slice(0,6).sort();
 const rareColor=colors[randomInt(0,colors.length-1)];
 const reqColors=shuffle([...colors]).slice(0,3).sort();
@@ -367,14 +394,35 @@ const requirements=reqColors.map(color=>({color:color,needed:randomMultipleOf5(l
 const moves=randomMultipleOf5(levelMovesMin,levelMovesMax);
 const board=createBoard(colors,rareColor).map(row=>row.map(bubble=>bubble.color));
 const shape=weightedShape();
+currentRandom=previousRandom;
 const data={board:board,colors:colors,moves:moves,rareColor:rareColor,requirements:requirements,shape:shape};
 state.levelCache[level]=data;
 return data;
+}
+function saveProgress(){
+try{
+const data={latestLevel:Math.max(...state.unlockedLevels),levelHasStarTile:state.levelHasStarTile,levelHighScores:state.levelHighScores,levelStars:state.levelStars};
+localStorage.setItem('bubbleProgress',JSON.stringify(data));
+}catch(error){}
+}
+function loadProgress(){
+try{
+const raw=localStorage.getItem('bubbleProgress');
+if(!raw)return;
+const data=JSON.parse(raw);
+state.levelStars=data.levelStars||{};
+state.levelHighScores=data.levelHighScores||{};
+state.levelHasStarTile=data.levelHasStarTile||{};
+const latestLevel=data.latestLevel||1;
+state.unlockedLevels=new Set();
+for(let level=1;level<=latestLevel;level++)state.unlockedLevels.add(level);
+}catch(error){}
 }
 function startLevel(level){
 const data=buildLevelData(level);
 state.level=level;
 state.score=0;
+state.levelStartHighScore=state.levelHighScores[level];
 state.stats={chainReactions:0,circle:0,diamond:0,rareMatches:0,square:0,star:0,triangle:0};
 state.colors=[...data.colors];
 state.rareColor=data.rareColor;
@@ -409,10 +457,11 @@ state.trackPositions.push({level:level,logicalY:logicalY,shape:data.shape,x:(raw
 }
 }
 function renderTrack(){
-const newHeight=state.trackMaxLogicalY+trackTopPadding+trackBottomPadding;
-const oldHeight=state.trackContentHeight;
 const content=document.getElementById('trackContent');
 const scroller=document.getElementById('trackScroll');
+trackBottomPadding=Math.max(90,Math.ceil(scroller.clientHeight/2));
+const newHeight=state.trackMaxLogicalY+trackTopPadding+trackBottomPadding;
+const oldHeight=state.trackContentHeight;
 content.style.height=newHeight+'px';
 state.trackContentHeight=newHeight;
 if(oldHeight>0)scroller.scrollTop+=newHeight-oldHeight;
@@ -498,10 +547,9 @@ const data=buildLevelData(point.level);
 node.className='trackNode'+(unlocked?'':' locked');
 const icon=unlocked?shapeSvg({color:data.rareColor,rotate:false,special:data.shape==='circle'?null:data.shape},'track'+point.level):shapeSvg({color:'black',rotate:false,special:null},'track'+point.level);
 const numberClass='trackNodeNumber'+(unlocked&&data.shape==='triangle'?' triangleNumber':'');
-const starRank=state.levelStars[point.level]||0;
-const starCount=starRank===4?3:starRank;
-const starTheme=starRank===4?palette.blue:palette.yellow;
-const starsHtml=starCount>0?'<div class="trackNodeStars">'+starRow(starCount,'track'+point.level,starTheme)+'</div>':'';
+const metCount=state.levelStars[point.level];
+const tier=metCount!==undefined?starTierFromMetCount(metCount):null;
+const starsHtml=tier?'<div class="trackNodeStars">'+starRow(tier.count,'track'+point.level,tier.blue?'blue':'yellow',!!state.levelHasStarTile[point.level])+'</div>':'';
 const highScore=state.levelHighScores[point.level];
 const scoreHtml=highScore!==undefined?'<div class="trackNodeScore">'+highScore+'</div>':'';
 node.innerHTML=icon+'<span class="'+numberClass+'">'+point.level+'</span>'+starsHtml+scoreHtml;
@@ -554,6 +602,7 @@ return{color:color,el:null,id:nextId,rotate:false,special:null,spawnRow:spawnRow
 }
 function percent(i){return 'calc('+i+'*100%/9 + 2px)';}
 function percentCenter(i){return 'calc('+(i+0.5)+'*100%/9 - 4px)';}
+function gridOffset(i){return i*100+'%';}
 async function processMove(r1,c1,r2,c2){
 if(state.busy)return;
 const bubbleA=state.board[r1][c1];
@@ -577,6 +626,10 @@ setStack(bubbleA,bubbleB,null);
 render();
 while(matches.length>0){
 await resolveMatches(matches);
+if(!state.celebrating&&state.requirements.every(req=>req.matched>=req.needed)){
+state.celebrating=true;
+render();
+}
 applyGravity();
 syncPositions();
 await sleep(280);
@@ -586,12 +639,12 @@ state.busy=false;
 render();
 checkEnd();
 }
-function randomInt(min,max){return min+Math.floor(Math.random()*(max-min+1));}
+function randomInt(min,max){return min+Math.floor(currentRandom()*(max-min+1));}
 function randomMultipleOf5(min,max){const steps=(max-min)/5;return min+5*randomInt(0,steps);}
 function weightedRandomColor(colors,rareColor){
 const weights=colors.map(color=>color===rareColor?5:19);
 const total=weights.reduce((sum,weight)=>sum+weight,0);
-let roll=Math.random()*total;
+let roll=currentRandom()*total;
 for(let i=0;i<colors.length;i++){
 roll-=weights[i];
 if(roll<=0)return colors[i];
@@ -599,7 +652,7 @@ if(roll<=0)return colors[i];
 return colors[colors.length-1];
 }
 function weightedShape(){
-const roll=Math.random()*100;
+const roll=currentRandom()*100;
 if(roll<65)return'circle';
 if(roll<85)return'triangle';
 if(roll<95)return'diamond';
@@ -615,7 +668,10 @@ el.style.borderColor=color;
 el.style.boxShadow='0 4px 12px rgba(0,0,0,0.4),inset 0 2px 4px rgba(255,255,255,0.3),0 0 12px '+hexToRgba(color,0.6);
 }
 function render(){
-document.getElementById('level').textContent='Level '+state.level;
+const hasHighScore=state.levelStartHighScore!==undefined;
+document.getElementById('level').classList.toggle('centered',!hasHighScore);
+document.getElementById('levelNumber').textContent='Level '+state.level;
+document.getElementById('levelHighScore').textContent=hasHighScore?'High score: '+state.levelStartHighScore:'';
 const stats=document.getElementById('stats');
 stats.innerHTML='';
 const movesColumn=document.createElement('div');
@@ -625,21 +681,22 @@ backButton.className='circle backButton';
 backButton.innerHTML='<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15 4L7 12L15 20" fill="none" stroke="#F0F0F0" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/></svg>';
 backButton.addEventListener('click',returnToTrack);
 const movesCircle=statCircle(state.moves,'Moves');
-const movesColor=state.moves>15?palette.green.base:state.moves>10?palette.yellow.base:state.moves>5?palette.orange.base:palette.red.base;
-applyGlow(movesCircle,state.celebrating?palette.green.base:movesColor);
-if(state.celebrating)applyGlow(backButton,palette.green.base);
+const movesColor=state.moves>=35?palette.blue.base:state.moves>=20?palette.green.base:state.moves>=10?palette.yellow.base:state.moves>=5?palette.orange.base:palette.red.base;
+applyGlow(movesCircle,state.celebrating?palette.blue.base:movesColor);
+if(state.celebrating)applyGlow(backButton,palette.blue.base);
 movesColumn.appendChild(backButton);
 movesColumn.appendChild(movesCircle);
 stats.appendChild(movesColumn);
 state.requirements.forEach(req=>stats.appendChild(requirementCircle(req)));
 const scoreCircle=statCircle(state.score,'Score');
-if(state.celebrating)applyGlow(scoreCircle,palette.green.base);
+if(state.celebrating)applyGlow(scoreCircle,palette.blue.base);
 stats.appendChild(scoreCircle);
 }
 function requirementCircle(req){
 const circle=document.createElement('div');
 circle.className='circle';
-if(state.celebrating||req.matched>=req.needed)applyGlow(circle,palette.green.base);
+if(state.celebrating)applyGlow(circle,palette.blue.base);
+else if(req.matched>=req.needed)applyGlow(circle,palette.green.base);
 const dot=document.createElement('div');
 dot.className='circleDot';
 dot.innerHTML=withUid(circleSvg(req.color),'req-'+req.color);
@@ -709,6 +766,7 @@ let scoreGain=0;
 groups.forEach(group=>{
 scoreGain+=group.special?(creationScore[group.special]||0):5;
 state.stats[group.special||'circle']++;
+if(group.special==='star')state.levelHasStarTile[state.level]=true;
 if(group.color===state.rareColor){scoreGain+=5;state.stats.rareMatches++;}
 });
 preActivated.forEach(entry=>{scoreGain+=activationScore[entry.bubble.special]||0;});
@@ -810,7 +868,7 @@ if(bubbleB&&bubbleB.el)bubbleB.el.style.zIndex=zB;
 }
 function shuffle(array){
 for(let i=array.length-1;i>0;i--){
-const j=Math.floor(Math.random()*(i+1));
+const j=Math.floor(currentRandom()*(i+1));
 const temp=array[i];
 array[i]=array[j];
 array[j]=temp;
@@ -840,7 +898,7 @@ return bonuses.map(bonus=>'<div class="bonusRow"><span>'+bonus.label+'</span><sp
 function showOverlay(text,buttonText,action,stars){
 const overlay=document.getElementById('overlay');
 document.getElementById('overlayText').textContent=text;
-document.getElementById('overlayStars').innerHTML=stars&&stars.count>0?starRow(stars.count,'overlay',stars.blue?palette.blue:palette.yellow):'';
+document.getElementById('overlayStars').innerHTML=stars&&stars.count>0?starRow(stars.count,'overlay',stars.blue?'blue':'yellow',!!state.levelHasStarTile[state.level]):'';
 document.getElementById('overlayScore').textContent='Score: '+state.score;
 document.getElementById('overlayBreakdown').innerHTML=stars?breakdownHtml():'';
 document.getElementById('overlayBonuses').innerHTML=stars?bonusesHtml():'';
@@ -902,8 +960,8 @@ const el=document.createElement('div');
 el.className='bubble';
 el.innerHTML=shapeSvg(bubble,'b'+bubble.id);
 el.style.setProperty('--rotation',bubble.rotate?'90deg':'0deg');
-el.style.left=percent(c);
-el.style.top=percent(bubble.spawnRow!==null?bubble.spawnRow:r);
+el.style.setProperty('--bx',gridOffset(c));
+el.style.setProperty('--by',gridOffset(bubble.spawnRow!==null?bubble.spawnRow:r));
 el.addEventListener('pointerdown',event=>{
 state.activePointer={id:bubble.id,x:event.clientX,y:event.clientY};
 el.classList.add('active');
@@ -912,12 +970,12 @@ boardInner.appendChild(el);
 bubble.el=el;
 elementsById.set(bubble.id,el);
 if(bubble.spawnRow!==null){
-requestAnimationFrame(()=>{requestAnimationFrame(()=>{el.style.top=percent(r);});});
+requestAnimationFrame(()=>{requestAnimationFrame(()=>{el.style.setProperty('--by',gridOffset(r));});});
 bubble.spawnRow=null;
 }
 }else{
-bubble.el.style.top=percent(r);
-bubble.el.style.left=percent(c);
+bubble.el.style.setProperty('--by',gridOffset(r));
+bubble.el.style.setProperty('--bx',gridOffset(c));
 }
 }
 }
@@ -945,6 +1003,7 @@ trackWidth=document.getElementById('trackScroll').clientWidth||trackWidth;
 pathsDefs=document.querySelector('#trackPaths defs');
 pathsGroup=document.getElementById('trackPathsGroup');
 nodesLayer=document.getElementById('trackNodesLayer');
+loadProgress();
 const scroller=document.getElementById('trackScroll');
 let fillSafety=0;
 do{
